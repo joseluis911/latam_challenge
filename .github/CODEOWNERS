@@ -1,0 +1,5 @@
+# CODEOWNERS — auto-assigns reviewer for any PR.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# Global owner: every file requires this owner's review on PRs.
+*   @joseluis911
