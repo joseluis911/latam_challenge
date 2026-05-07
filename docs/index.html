@@ -131,10 +131,17 @@
     box-shadow: 0 20px 60px rgba(11,0,51,.08);
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
   }
-  @media (max-width: 880px){ .card-strip { grid-template-columns: repeat(2,1fr); padding: 28px; } }
-  .stat .num { font-size: 40px; font-weight: 800; color: var(--indigo); letter-spacing: -0.02em; }
+  @media (max-width: 880px){ .card-strip { grid-template-columns: repeat(2,1fr); padding: 28px; gap: 20px; } }
+  @media (max-width: 480px){ .card-strip { grid-template-columns: 1fr 1fr; padding: 22px; gap: 16px; } }
+  .stat { min-width: 0; overflow-wrap: anywhere; }
+  .stat .num {
+    font-size: clamp(22px, 6vw, 40px);
+    font-weight: 800; color: var(--indigo);
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
   .stat .num span { color: var(--coral); }
-  .stat .lbl { font-size: 13px; color: var(--ink-soft); margin-top: 4px; text-transform: uppercase; letter-spacing: .1em; }
+  .stat .lbl { font-size: 12px; color: var(--ink-soft); margin-top: 6px; text-transform: uppercase; letter-spacing: .1em; }
 
   .section { margin-top: 72px; }
   .section-head { display: flex; align-items: end; justify-content: space-between; margin-bottom: 24px; }
@@ -163,6 +170,48 @@
     display:flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
   }
   footer a { color: var(--coral-soft); }
+
+  /* --- Mobile nav (hamburger) ----------------------------------------- */
+  .nav-toggle { display: none; }
+  .nav-burger { display: none; }
+
+  @media (max-width: 760px) {
+    .nav { flex-wrap: wrap; align-items: center; }
+    .nav-burger {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      width: 28px;
+      height: 22px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .nav-burger span {
+      display: block;
+      height: 2px;
+      width: 100%;
+      background: var(--white);
+      border-radius: 2px;
+      transition: transform .25s, opacity .25s;
+    }
+    .nav-links {
+      display: none;
+      width: 100%;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,.12);
+    }
+    .nav-toggle:checked ~ .nav-links { display: flex; }
+    .nav-toggle:checked ~ .nav-burger span:nth-child(1) {
+      transform: translateY(10px) rotate(45deg);
+    }
+    .nav-toggle:checked ~ .nav-burger span:nth-child(2) { opacity: 0; }
+    .nav-toggle:checked ~ .nav-burger span:nth-child(3) {
+      transform: translateY(-10px) rotate(-45deg);
+    }
+  }
 </style>
 </head>
 <body>
@@ -173,24 +222,30 @@
       <div class="brand-mark"></div>
       <span>LATAM · ML CHALLENGE</span>
     </div>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle">
+    <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </label>
     <div class="nav-links">
-      <a href="challenge.md">Documentación</a>
+      <a href="https://github.com/joseluis911/latam_challenge/tree/main/docs" target="_blank" rel="noopener">Documentación</a>
       <a href="#partes">Partes</a>
-      <a href="#stack">Stack</a>
+      <a href="#extras">Extras</a>
+      <a href="#observability">Observability</a>
     </div>
   </nav>
 
   <div class="hero-grid">
     <div>
-      <span class="eyebrow"><span class="dot"></span> Software Engineer · ML &amp; LLMs</span>
+      <span class="eyebrow"><span class="dot"></span> v1.0.0 shipped · Software Engineer · ML &amp; LLMs</span>
       <h1>Predicción de <em>delay</em> de vuelos en SCL.</h1>
       <p class="lede">
-        Operacionalización del modelo del Data Scientist: del notebook a un API en producción,
-        con CI/CD y despliegue cloud. Esta página es el índice del repositorio del challenge.
+        Modelo del Data Scientist operacionalizado de cabo a rabo: API en Cloud Run,
+        infra como código con Terraform, CI/CD automatizado y review automático de PRs por Claude.
+        6,241 requests, 0 fallos en stress test live.
       </p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="challenge.md">Leer challenge.md →</a>
-        <a class="btn btn-ghost" href="https://github.com/" target="_blank" rel="noopener">Ver repositorio</a>
+        <a class="btn btn-primary" href="https://github.com/joseluis911/latam_challenge/tree/main/docs" target="_blank" rel="noopener">Leer challenge.md →</a>
+        <a class="btn btn-ghost" href="https://github.com/joseluis911/latam_challenge" target="_blank" rel="noopener">Ver repositorio</a>
       </div>
     </div>
 
@@ -245,14 +300,14 @@
         <p>API desplegada en Cloud Run + Terraform + dashboard. Tras Part III.</p>
       </div>
       <div class="part">
-        <span class="tag" style="color:#1B0088">v0.3.0</span>
+        <span class="tag" style="color:#10A07A">v0.3.0 · ✅</span>
         <h3>MVP automatizado</h3>
         <p>CI/CD completo, deploy automático en cada merge a main. Tras Part IV.</p>
       </div>
       <div class="part">
-        <span class="tag" style="color:#ED1A6F">v1.0.0</span>
+        <span class="tag" style="color:#10A07A">v1.0.0 · ✅</span>
         <h3>Release final</h3>
-        <p>Polish + tag ceremonial de cierre desde <code>release/v1.0</code>.</p>
+        <p>Tag ceremonial desde <code>release/v1.0</code>. Listo para envío.</p>
       </div>
     </div>
   </section>
@@ -263,26 +318,55 @@
       <span class="kicker">/docs/challenge.md</span>
     </div>
     <div class="parts">
-      <a class="part" href="challenge.md#part-i--transcripción-del-modelo-challengemodelpy">
+      <div class="part">
         <span class="tag" style="color:#10A07A">PART I · ✅</span>
         <h3>Modelo</h3>
         <p>LogisticRegression balanceada sobre top-10 features. Bug fixes, justificación cuantitativa y lazy bootstrap. <code>make model-test</code> ✅</p>
-      </a>
-      <a class="part" href="challenge.md#part-ii--api-con-fastapi-challengeapipy">
+      </div>
+      <div class="part">
         <span class="tag" style="color:#10A07A">PART II · ✅</span>
         <h3>API</h3>
         <p>FastAPI con Pydantic validation, 422→400 handler, Swagger en <code>/docs</code>. <code>make api-test</code> ✅ (98% coverage)</p>
-      </a>
-      <a class="part" href="challenge.md#part-iii--deploy-en-la-nube">
+      </div>
+      <div class="part">
         <span class="tag" style="color:#10A07A">PART III · ✅</span>
         <h3>Deploy</h3>
         <p>Cloud Run + Artifact Registry + Terraform + dashboard. 6,241 reqs / 0 fails en stress test, p95 420ms.</p>
-      </a>
-      <a class="part" href="challenge.md#part-iv--cicd-githubworkflows">
+      </div>
+      <div class="part">
         <span class="tag" style="color:#10A07A">PART IV · ✅</span>
         <h3>CI/CD</h3>
         <p>4 workflows: <code>ci.yml</code> (lint + tests + tf-validate), <code>cd.yml</code> (auto-deploy), <code>claude-review.yml</code>, <code>pages.yml</code>.</p>
-      </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="extras">
+    <div class="section-head">
+      <h2>Extras más allá del enunciado</h2>
+      <span class="kicker">where the candidate shines</span>
+    </div>
+    <div class="parts">
+      <div class="part">
+        <span class="tag" style="color:#ED1A6F">EXTRA</span>
+        <h3>Terraform IaC</h3>
+        <p>Carpeta <code>infra/</code> con 8 recursos GCP provisionados con un solo <code>terraform apply</code>. State versionado, validate en CI.</p>
+      </div>
+      <div class="part">
+        <span class="tag" style="color:#ED1A6F">EXTRA</span>
+        <h3>Monitoring dashboard</h3>
+        <p>Cloud Monitoring custom: RPS, p95 latency, 5xx rate, instances. Provisionado vía Terraform como código.</p>
+      </div>
+      <div class="part">
+        <span class="tag" style="color:#ED1A6F">EXTRA</span>
+        <h3>Claude PR reviewer</h3>
+        <p>Workflow <code>claude-review.yml</code> que postea reviews automáticos en cada PR. Bugs, security, test coverage, contract changes.</p>
+      </div>
+      <div class="part">
+        <span class="tag" style="color:#ED1A6F">EXTRA</span>
+        <h3>GitHub Pages auto-deploy</h3>
+        <p>Workflow <code>pages.yml</code> con <code>actions/deploy-pages</code>. Esta misma página se redeploya en cada merge a main.</p>
+      </div>
     </div>
   </section>
 
