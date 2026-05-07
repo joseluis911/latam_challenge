@@ -362,9 +362,66 @@ Todo se actualiza en tiempo real mientras el API recibe tráfico. La URL del das
 
 ## Part IV — CI/CD (`.github/workflows/`)
 
-- `ci.yml` → linter + tests (`model-test`, `api-test`) en cada PR a `develop`/`main`.
-- `cd.yml` → build de imagen + deploy a Cloud Run en merge a `main`.
-- Secrets requeridos: _por completar._
+Cuatro workflows separados, cada uno con responsabilidad única (no un workflow gigante):
+
+| Workflow | Trigger | Jobs |
+|---|---|---|
+| `ci.yml` | PR a `main`/`develop`, push a esos branches | `lint` (ruff) → `test-model` + `test-api` (pytest+coverage) → `terraform-validate` (fmt + validate) |
+| `cd.yml` | Push a `main` (excluyendo cambios solo en docs/) | Auth GCP → build Docker → push a AR (con tag `:latest` y `:${SHA}`) → `gcloud run services update` → smoke test contra `/health` |
+| `claude-review.yml` | PR abierto / actualizado | Claude lee el diff y postea un review en el PR usando `anthropics/claude-code-action@beta` |
+| `pages.yml` | Push a `main` con cambios en `docs/**` | `actions/upload-pages-artifact` + `actions/deploy-pages` → publica `docs/` a GitHub Pages oficial |
+
+### `cd.yml` — auto-deploy a Cloud Run
+
+Replica `make deploy` dentro de Actions:
+
+1. **Auth GCP** vía `google-github-actions/auth@v2` con el secret `GCP_SA_KEY` (JSON key del service account `latam-deployer` provisionado por Terraform en Part III).
+2. **Configure docker** para Artifact Registry (`gcloud auth configure-docker us-central1-docker.pkg.dev`).
+3. **Build Docker image** con dos tags: `:${GITHUB_SHA}` (inmutable, para rollback) y `:latest`.
+4. **Push** ambos tags a `latam-images`.
+5. **Deploy** la imagen `:${GITHUB_SHA}` a Cloud Run con `gcloud run services update --image=...`. Cloud Run crea una nueva revisión, ruta el 100% del tráfico, y mantiene la anterior por si hay rollback rápido.
+6. **Smoke test** con `curl /health` (5 reintentos con backoff). Si no devuelve `{"status":"OK"}` el job falla y se notifica.
+7. **Summary** en `$GITHUB_STEP_SUMMARY` con URL, image SHA y service name — visible en la UI del run.
+
+`paths-ignore` excluye cambios solo en `docs/**` y workflows de `pages`/`claude-review` para no redeployar el API por un README typo.
+
+### `claude-review.yml` — code review automático con Claude
+
+Cada PR a `develop` / `main` dispara un review automático escrito por Claude (Anthropic). El prompt focaliza en bugs, security, test coverage, y break de contratos del API. Comenta directo en el PR. Si falta el secret `ANTHROPIC_API_KEY`, el job se salta sin romper.
+
+### `pages.yml` — GitHub Pages via workflow oficial
+
+En lugar del flujo "deploy from branch" (que renderiza pero no auditás), usamos el flujo moderno con `actions/upload-pages-artifact` + `actions/deploy-pages`. Resultado: cada deploy a Pages es un workflow run con su propio status check, log, y URL pública (`https://joseluis911.github.io/latam_challenge/`). Cuando se mergea algo en `docs/`, Pages se actualiza automáticamente sin necesidad de tocar settings.
+
+### Secrets / variables (GitHub → Settings → Secrets and variables → Actions)
+
+| Nombre | Tipo | Scope | Para qué |
+|---|---|---|---|
+| `GCP_SA_KEY` | 🔒 Secret | environment `production` | JSON key del SA `latam-deployer`. Usado por `cd.yml` para auth GCP |
+| `ANTHROPIC_API_KEY` | 🔒 Secret | repo-level | API key de Anthropic. Usado por `claude-review.yml` |
+
+El environment `production` actúa como gate adicional: si en el futuro queremos requerir aprobación manual antes de cada deploy, se configura ahí mismo.
+
+### Patrón de despliegue resultante
+
+```
+PR feature/* → develop
+   ↓
+ci.yml (lint + tests + tf-validate) + claude-review.yml (Claude comenta)
+   ↓
+merge a develop
+   ↓
+PR develop → main (release vX.Y.Z)
+   ↓
+ci.yml + claude-review.yml (de nuevo)
+   ↓
+merge a main + tag vX.Y.Z
+   ↓
+cd.yml (build → push → deploy → smoke test) ✅
+pages.yml (si cambió docs/) ✅
+```
+
+Cada release a main = nueva imagen Docker en producción + nueva revisión en Cloud Run + Pages actualizado, sin que nadie toque la consola.
 
 ---
 
