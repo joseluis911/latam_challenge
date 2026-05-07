@@ -9,7 +9,7 @@ Documentación de la solución al challenge.
 - **Nombre:** Jose Luis Santiago Marquez
 - **Mail:** jlsantiago691@gmail.com
 - **Repositorio:** https://github.com/joseluis911/latam_challenge
-- **API desplegada:** _<api_url>_ _(disponible al completar Part III)_
+- **API desplegada:** https://latam-delay-api-108332844354.us-central1.run.app
 
 ---
 
@@ -223,11 +223,136 @@ uvicorn challenge.api:app --reload
 
 ## Part III — Deploy en la nube
 
-**Proveedor:** _GCP (Cloud Run) — por confirmar._
+**Proveedor:** Google Cloud Platform — Cloud Run + Artifact Registry, region `us-central1`.
 
-- URL del API: _<pegar en `Makefile` línea 26>_
-- Pasos de despliegue: _por completar._
-- `make stress-test` ✅ / ❌
+**API en producción:** https://latam-delay-api-108332844354.us-central1.run.app
+
+### Servicios GCP usados (free tier perpetuo)
+
+| Servicio | Rol | Free tier mensual |
+|---|---|---|
+| **Cloud Run** | Hostea el contenedor del FastAPI; scale-to-zero | 2M req, 360k GB-s, 180k vCPU-s |
+| **Artifact Registry** | Repo Docker privado (`latam-images`) | 0.5 GB |
+| **IAM Service Account** | `latam-deployer` para Part IV CD pipeline | gratis |
+| **Cloud Logging** | Logs estructurados auto-recolectados | 50 GB |
+| **Cloud Monitoring** | Dashboard custom (RPS, p95, 5xx, instances) | métricas built-in gratis |
+
+Costo real estimado para el challenge: **$0.00 USD**.
+
+### Infraestructura como código — Terraform
+
+Todo provisionado con Terraform en la carpeta `infra/`:
+
+```
+infra/
+├── versions.tf            # terraform 1.5+ + google provider 5.40+
+├── main.tf                # provider google
+├── variables.tf           # project_id, region, service_name, etc.
+├── terraform.tfvars       # valores concretos (no secretos)
+├── artifact_registry.tf   # google_artifact_registry_repository
+├── iam.tf                 # latam-deployer SA + 3 roles project-level
+├── cloud_run.tf           # google_cloud_run_v2_service + public_invoker
+├── monitoring.tf          # google_monitoring_dashboard custom
+├── outputs.tf             # cloud_run_url, ar_repo_url, image_url, etc.
+└── README.md
+```
+
+**8 recursos** se crean con un solo `terraform apply`. State local (gitignored). Para limpiar todo al final: `terraform destroy`.
+
+### Patrón "lifecycle ignore_changes" en Cloud Run
+
+El recurso `google_cloud_run_v2_service.api` tiene `lifecycle.ignore_changes = [template[0].containers[0].image]`. Razón:
+
+- Terraform **crea** el service con un placeholder image (`us-docker.pkg.dev/cloudrun/container/hello`).
+- La **imagen real** la pushea Docker → Artifact Registry y luego `gcloud run services update --image=…` la swappea.
+- Sin el `ignore_changes`, cada `terraform plan` detectaría que la imagen cambió y querría revertirla al placeholder. Con el `ignore_changes`, Terraform maneja el "cascarón" del service y la CI/CD maneja la imagen — separación correcta de responsabilidades.
+
+Este es el patrón estándar para Cloud Run con Terraform en producción.
+
+### Bootstrap GCP (one-time, manual)
+
+Antes del primer `terraform apply`, configuración manual una sola vez:
+
+1. Proyecto GCP: `latam-challenge-495606` (display name: `latam-challenge`)
+2. Billing asociado a una cuenta activa
+3. APIs habilitadas:
+   - `run.googleapis.com`
+   - `artifactregistry.googleapis.com`
+   - `iam.googleapis.com`
+   - `cloudresourcemanager.googleapis.com`
+   - `monitoring.googleapis.com`
+   - `orgpolicy.googleapis.com`
+4. Org policy override: `iam.allowedPolicyMemberDomains` → `allowAll: true` (necesario para permitir `allUsers` como invocador, ya que la cuenta vive en una org Workspace).
+5. ADC autenticadas con la cuenta correcta:
+   - `gcloud auth login`
+   - `gcloud auth application-default login`
+   - `gcloud auth application-default set-quota-project latam-challenge-495606`
+
+### Dockerfile
+
+Multi-stage para imagen pequeña sin compiladores en runtime:
+
+- **Stage 1 (builder):** `python:3.10-slim` + `build-essential` → `pip wheel --wheel-dir=/wheels -r requirements.txt`
+- **Stage 2 (runtime):** `python:3.10-slim` → instala desde wheels (sin gcc) → copia `challenge/` y `data/` → usuario non-root `app` → `EXPOSE 8080` → `CMD uvicorn challenge.api:app --host 0.0.0.0 --port ${PORT}`
+
+`PORT` lo inyecta Cloud Run automáticamente (no se setea como env explícita; eso da error "reserved env name").
+
+`.dockerignore` excluye tests, infra, docs, notebook, .git, venv, etc. Imagen final ~280 MB.
+
+### Flujo de deploy
+
+```bash
+# (una vez) bootstrap manual
+cd infra
+terraform init
+terraform apply
+
+# (cada deploy) build + push + swap
+make docker-build      # docker build -t latam-delay-api:latest .
+make docker-push       # tag + push a us-central1-docker.pkg.dev/...
+make deploy            # gcloud run services update --image=...
+```
+
+O atajo: `make deploy` corre los 3 en cadena.
+
+### Verificación
+
+`make stress-test` con la URL ya en `Makefile` línea 26:
+
+```
+locust -f tests/stress/api_stress.py --headless --users 100 --spawn-rate 1 --run-time 60s -H <cloud_run_url>
+```
+
+Resultados (test real contra Cloud Run en producción):
+
+| Métrica | Valor |
+|---|---|
+| Total requests | 6,241 |
+| Failures | **0 (0.00%)** |
+| Throughput | 105 req/s sostenidos |
+| Latency p50 | 260 ms |
+| Latency p95 | 420 ms |
+| Latency p99 | 530 ms |
+| Latency p99.9 | 4.8 s (cold start tail) |
+
+Reporte HTML completo en `reports/stress-test.html` después de correr el test.
+
+### Bug adicional encontrado
+
+| # | Archivo | Bug | Fix |
+|---|---|---|---|
+| 8 | `requirements-test.txt` | `locust~=1.6` (de 2020) usa imports de Flask incompatibles con Jinja2 ≥3.1: `ImportError: cannot import name 'escape' from 'jinja2'` | Bump `locust~=2.20` |
+
+### Dashboard de monitoreo
+
+Provisionado por `infra/monitoring.tf`. URL directa en el output `monitoring_dashboard_url`. Widgets:
+
+- Request count (RPS) — sobre `run.googleapis.com/request_count`
+- Latency p95 — sobre `run.googleapis.com/request_latencies` con `REDUCE_PERCENTILE_95`
+- 5xx error rate — filtrado por `response_code_class="5xx"`
+- Active container instances — sobre `run.googleapis.com/container/instance_count`
+
+Todo se actualiza en tiempo real en GCP Console mientras el API recibe tráfico.
 
 ---
 
