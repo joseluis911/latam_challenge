@@ -1,7 +1,16 @@
-name: 'Continuous Delivery'
+name: CD
+
+# Placeholder workflow. The real implementation (build Docker image, push to
+# Artifact Registry, deploy to Cloud Run) lands in feature/part-4-cicd.
+# `workflow_dispatch` keeps this file valid YAML without firing on push/PR.
 
 on:
-  ...
+  workflow_dispatch:
 
 jobs:
-  ...
+  placeholder:
+    name: Placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note
+        run: echo "CD pipeline will be implemented in Part IV (feature/part-4-cicd)."
