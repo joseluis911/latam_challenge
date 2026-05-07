@@ -1,0 +1,51 @@
+# --- Git / GitHub ---
+.git
+.github
+.gitignore
+
+# --- Python ---
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+env
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# --- Tests / dev tooling (not needed at runtime) ---
+tests
+ruff.toml
+.pre-commit-config.yaml
+.coveragerc
+requirements-dev.txt
+requirements-test.txt
+Makefile
+
+# --- Notebooks / docs / non-runtime files ---
+challenge/exploration.ipynb
+docs
+README.md
+infra
+reports
+
+# --- macOS / IDE noise ---
+.DS_Store
+.vscode
+.idea
+.cursor
+.claude
+__MACOSX
+
+# --- Coverage / artifacts ---
+.coverage
+coverage.xml
+htmlcov
+*.log
+
+# --- Terraform (just in case) ---
+.terraform
+*.tfstate*
+terraform.tfvars*

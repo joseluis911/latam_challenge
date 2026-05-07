@@ -274,15 +274,28 @@
         <p>FastAPI con Pydantic validation, 422→400 handler, Swagger en <code>/docs</code>. <code>make api-test</code> ✅ (98% coverage)</p>
       </a>
       <a class="part" href="challenge.md#part-iii--deploy-en-la-nube">
-        <span class="tag">PART III</span>
+        <span class="tag" style="color:#10A07A">PART III · ✅</span>
         <h3>Deploy</h3>
-        <p>API desplegado en GCP, URL configurada en el <code>Makefile</code>, stress-test verde.</p>
+        <p>Cloud Run + Artifact Registry + Terraform + dashboard. 6,241 reqs / 0 fails en stress test, p95 420ms.</p>
       </a>
       <a class="part" href="challenge.md#part-iv--cicd-githubworkflows">
         <span class="tag">PART IV</span>
         <h3>CI/CD</h3>
         <p>Workflows <code>ci.yml</code> y <code>cd.yml</code> en <code>.github/workflows</code>.</p>
       </a>
+    </div>
+  </section>
+
+  <section class="section" id="observability">
+    <div class="section-head">
+      <h2>Observability live</h2>
+      <span class="kicker">Cloud Monitoring · GCP</span>
+    </div>
+    <p style="color:var(--ink-soft); max-width:60ch; margin:0 0 18px;">
+      Dashboard custom provisionado con Terraform sobre Cloud Run. Métricas en tiempo real de RPS, latencia p95, error rate y autoscaling de instancias.
+    </p>
+    <div style="border-radius:18px; overflow:hidden; box-shadow:0 20px 60px rgba(11,0,51,.15); border:1px solid #ece7df;">
+      <img src="screenshots/dashboard-overview.jpg" alt="LATAM Delay API monitoring dashboard — RPS, p95 latency, 5xx rate, instance count" style="display:block; width:100%; height:auto;">
     </div>
   </section>
 </main>

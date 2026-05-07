@@ -67,3 +67,16 @@ service-account*.json
 # --- Docker / Locust artifacts ---
 *.log
 locust_stats*.csv
+
+# --- Terraform ---
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
