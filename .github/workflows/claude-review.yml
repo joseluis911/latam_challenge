@@ -1,0 +1,46 @@
+name: Claude PR review
+
+# Posts a code review on every PR to develop or main, written by Claude.
+# Requires the secret ANTHROPIC_API_KEY (your personal Anthropic API key).
+# Skipped automatically if the secret is missing.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [develop, main]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    name: Claude review
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Review this pull request. Focus on:
+            1. Bugs or logic errors.
+            2. Security concerns (exposed secrets, injection, unsafe deserialization).
+            3. Test coverage of the changed code paths.
+            4. Code quality (readability, naming, dead code).
+            5. Anything that breaks existing API contracts in challenge/api.py.
+
+            Be concise: bullets only, file:line references, no fluff.
+            If the PR looks fine, say so in one line.
