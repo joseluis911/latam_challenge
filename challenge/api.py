@@ -76,7 +76,7 @@ class PredictResponse(BaseModel):
 app = fastapi.FastAPI(
     title="LATAM Flight Delay Prediction API",
     description="Predicts delay (>15 min) for flights at SCL airport.",
-    version="0.1.0",
+    version="1.0.0",
     contact={"name": "Jose Luis Santiago Marquez", "email": "jlsantiago691@gmail.com"},
 )
 

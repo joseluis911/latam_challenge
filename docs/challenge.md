@@ -1,27 +1,56 @@
 # LATAM — Software Engineer (ML & LLMs) Challenge
 
-Documentación de la solución al challenge.
+Solution writeup — **v1.0.0**.
 
 ---
 
-## Autor
+## TL;DR
 
-- **Nombre:** Jose Luis Santiago Marquez
-- **Mail:** jlsantiago691@gmail.com
-- **Repositorio:** https://github.com/joseluis911/latam_challenge
-- **API desplegada:** https://latam-delay-api-108332844354.us-central1.run.app
+Flight delay prediction model for SCL airport, **operationalized end-to-end**: from the Data Scientist's notebook to a production API with observability, automated CI/CD, and automatic Claude code reviews on every PR.
+
+| | |
+|---|---|
+| 🔧 **Live API** | https://latam-delay-api-108332844354.us-central1.run.app |
+| 🌐 **GitHub Pages (landing)** | https://joseluis911.github.io/latam_challenge/ |
+| 📦 **Repo** | https://github.com/joseluis911/latam_challenge |
+| ✅ **Tests** | 8/8 passing · ~92% coverage |
+| ⚡ **Stress test (live)** | 6,241 reqs · **0 failures** · p95 420 ms |
+| 🚀 **Releases on main** | `v0.1.0` → `v0.2.0` → `v0.3.0` → **`v1.0.0`** |
+
+### Extras beyond the brief
+
+What LATAM asked for + what I added on top:
+
+| Required | Delivered | Extra |
+|---|---|---|
+| Model in `model.py` | Balanced LR with quantitative justification, lazy bootstrap, top-10 features, 6 documented and fixed bugs | — |
+| FastAPI service | Endpoints + Pydantic + Swagger + 422→400 override | — |
+| Cloud deploy | Cloud Run + Artifact Registry | **Terraform IaC** (`infra/`, 8 resources) · **Cloud Monitoring custom dashboard** · `lifecycle.ignore_changes` pattern |
+| Basic CI/CD | `ci.yml` lint+tests + `cd.yml` deploy | **`claude-review.yml`** — Claude reviews every PR · **`pages.yml`** — auto-deploy of docs to GitHub Pages · `terraform-validate` job in CI |
+| Documentation in `challenge.md` | This file (~470 lines, all decisions, bugs, metrics) | **GitHub Pages landing** with LATAM palette and dashboard screenshot |
 
 ---
 
-## Estructura del repositorio
+## Author
+
+- **Name:** Jose Luis Santiago Marquez
+- **Email:** jlsantiago691@gmail.com
+- **Repository:** https://github.com/joseluis911/latam_challenge
+- **Deployed API:** https://latam-delay-api-108332844354.us-central1.run.app
+- **Docs (Pages):** https://joseluis911.github.io/latam_challenge/
+
+---
+
+## Repository structure
 
 ```
 .
 ├── challenge/            # model.py, api.py
 ├── data/                 # dataset
-├── docs/                 # challenge.md (este archivo) + index.html (GitHub Pages)
+├── docs/                 # challenge.md (this file) + index.html (GitHub Pages)
 ├── tests/                # model, api, stress
-├── workflows/ → .github/workflows/  (ci.yml, cd.yml)
+├── workflows/ → .github/workflows/  (ci.yml, cd.yml, claude-review.yml, pages.yml)
+├── infra/                # Terraform configuration
 ├── Dockerfile
 ├── Makefile
 └── requirements*.txt
@@ -29,96 +58,96 @@ Documentación de la solución al challenge.
 
 ---
 
-## Flujo de trabajo (GitFlow)
+## Workflow (GitFlow)
 
-- `main` → releases oficiales para review (con tags semánticos).
-- `develop` → integración.
-- `feature/*` → cada parte del challenge (`feature/part-1-model`, `feature/part-2-api`, …).
-- Las ramas de desarrollo **no se borran** (lo pide el enunciado).
+- `main` → official releases for review (with semantic tags).
+- `develop` → integration branch.
+- `feature/*` → one branch per challenge part (`feature/part-1-model`, `feature/part-2-api`, …).
+- Development branches are **never deleted** (rule #2 of the brief).
 
 ---
 
-## Estrategia de releases incrementales
+## Incremental release strategy
 
-`main` no espera al final del desarrollo: cada vez que `develop` alcanza un estado *consumible* se mergea a `main` con un tag semántico. Así `main` siempre refleja un artefacto deployable y el historial cuenta una historia de delivery iterativo en vez de un único big-bang final.
+`main` doesn't wait until the end of development: every time `develop` reaches a *consumable* state, it gets merged into `main` with a semantic tag. That way `main` always reflects a deployable artifact and the history tells an iterative-delivery story instead of a single big-bang at the end.
 
-| Después de | MVP | ¿Release? | Tag |
+| After | MVP | Release? | Tag |
 |---|---|---|---|
-| Part I — modelo | ❌ no consumible (librería sola) | no | — |
-| Part II — API | ✅ **primer MVP** (API local funcional) | sí | **`v0.1.0`** |
-| Part III — deploy | ✅ MVP en cloud | sí | **`v0.2.0`** |
-| Part IV — CI/CD | ✅ auto-deploy + observability | sí | **`v0.3.0`** |
-| Release final | 🎯 polish + tag oficial | sí | **`v1.0.0`** |
+| Part I — model | ❌ not consumable (library only) | no | — |
+| Part II — API | ✅ **first MVP** (working local API) | yes | **`v0.1.0`** |
+| Part III — deploy | ✅ MVP in cloud | yes | **`v0.2.0`** |
+| Part IV — CI/CD | ✅ auto-deploy + observability | yes | **`v0.3.0`** |
+| Final release | 🎯 polish + ceremonial tag | yes | **`v1.0.0`** |
 
-Mecánica del release a `main`:
+Release-to-`main` mechanics:
 
 ```bash
 git checkout main
 git pull
-git merge --no-ff develop -m "release: vX.Y.Z (descripción)"
+git merge --no-ff develop -m "release: vX.Y.Z (description)"
 git tag -a vX.Y.Z -m "vX.Y.Z: <highlights>"
 git push origin main --tags
 ```
 
-La rama `release/v1.0` se reserva como espacio ceremonial de estabilización para el lanzamiento oficial v1.0.0.
+The `release/v1.0` branch is reserved as a ceremonial stabilization space for the official v1.0.0 launch.
 
 ---
 
-## Part I — Transcripción del modelo (`challenge/model.py`)
+## Part I — Model transcription (`challenge/model.py`)
 
-**Objetivo:** transcribir `exploration.ipynb` a `model.py` cumpliendo `make model-test`.
+**Goal:** transcribe `exploration.ipynb` into `model.py` so that `make model-test` passes.
 
-### Modelo elegido: **Logistic Regression con `class_weight='balanced'`**
+### Chosen model: **Logistic Regression with `class_weight='balanced'`**
 
-El DS dejó la decisión abierta en la última celda del notebook:
+The DS left the choice open in the last cell of the notebook:
 
 > *"There is no noticeable difference in results between XGBoost and LogisticRegression. […] Improves the model's performance when balancing classes. With this, the model to be productive must be the one that is trained with the top 10 features and class balancing, **but which one?**"*
 
-Como las métricas son equivalentes, elegí Logistic Regression sobre los siguientes criterios de **operacionalización**:
+Since the metrics are equivalent, I picked Logistic Regression on **operationalization criteria**:
 
-| Criterio | LogReg balanceada | XGBoost balanceado | Ganador |
+| Criterion | Balanced LogReg | Balanced XGBoost | Winner |
 |---|---|---|---|
-| Métricas (recall clase 1, f1) | ~0.69 / ~0.36 | ~0.69 / ~0.37 | empate |
-| Interpretabilidad (coeficientes) | Lineal, directo | Requiere SHAP | **LR** |
-| Cold start en Cloud Run | ~50 ms load | ~500 ms load | **LR** |
-| Tamaño del modelo serializado | ~3 KB | ~50–500 KB | **LR** |
-| Dependencias nuevas | 0 (sklearn ya pinned) | `xgboost` extra | **LR** |
-| Reproducibilidad determinista | `random_state` simple | múltiples seeds | **LR** |
+| Metrics (recall class 1, f1) | ~0.69 / ~0.36 | ~0.69 / ~0.37 | tie |
+| Interpretability (coefficients) | Linear, direct | Requires SHAP | **LR** |
+| Cold start on Cloud Run | ~50 ms load | ~500 ms load | **LR** |
+| Serialized model size | ~3 KB | ~50–500 KB | **LR** |
+| New dependencies | 0 (sklearn already pinned) | extra `xgboost` | **LR** |
+| Deterministic reproducibility | simple `random_state` | multiple seeds | **LR** |
 
-Para una API que sirve predicciones en tiempo real con scale-to-zero, los segundos en cold start importan. La interpretabilidad de los coeficientes de LR permite además explicar a operaciones por qué un vuelo se predice como retraso (qué aerolínea, qué mes, internacional vs nacional) — valor de negocio real.
+For an API serving real-time predictions with scale-to-zero, cold-start seconds matter. LR's coefficient interpretability also lets ops explain *why* a flight is predicted as delayed (which airline, which month, international vs national) — real business value.
 
-**Configuración final:**
+**Final configuration:**
 
 ```python
 LogisticRegression(
-    class_weight="balanced",   # corrige el ~80/20 de la data
-    random_state=1,            # mismo seed que el notebook
-    max_iter=1000,             # asegura convergencia con balance
+    class_weight="balanced",   # corrects the ~80/20 class imbalance
+    random_state=1,            # same seed as the notebook
+    max_iter=1000,             # ensures convergence under the balanced weighting
 )
 ```
 
-### Bugs encontrados y corregidos
+### Bugs found and fixed
 
-| # | Archivo | Bug | Fix |
+| # | File | Bug | Fix |
 |---|---|---|---|
-| 1 | `challenge/model.py:10` | Anotación de tipo escrita como `Union(Tuple[…], pd.DataFrame)` con paréntesis (era llamada a función, no subscript de `Union`) | `Union[tuple[…], pd.DataFrame]` |
-| 2 | `tests/model/test_model.py:29` | Path cwd-relativo `"../data/data.csv"` rompía cuando se corre desde la raíz (como hace el `Makefile`) | Path absoluto: `Path(__file__).resolve().parents[2] / "data" / "data.csv"` |
-| 3 | `exploration.ipynb` cell 13 (`get_period_day`) | Comparaciones con `<` `>` no inclusivas; `5:00:00` exacto retorna `None` | No se usa en el modelo final (las top-10 features no requieren `period_day`); se documenta para referencia |
-| 4 | `exploration.ipynb` cell 26 (`get_rate_from_column`) | Calcula `total/delays` (inverso de la tasa de delay) | No afecta al modelo, solo a la exploración; se documenta para que no se use tal cual |
-| 5 | `requirements-test.txt` | `pytest~=6.2.5` es incompatible con `anyio>=4` que jala `fastapi/starlette`: `ModuleNotFoundError: No module named '_pytest.scope'` al cargar plugins | Bump: `pytest~=7.4`, `pytest-cov~=4.1`, `coverage~=7.6`, `mockito~=1.5` |
-| 6 | `challenge/model.py` (`_bootstrap_from_disk`) | `pd.read_csv` lanza `DtypeWarning` por columnas con tipos mixtos en el CSV | Pasar `low_memory=False` |
+| 1 | `challenge/model.py:10` | Type annotation written as `Union(Tuple[…], pd.DataFrame)` with parentheses (was a function call, not a `Union` subscript) | `Union[tuple[…], pd.DataFrame]` |
+| 2 | `tests/model/test_model.py:29` | cwd-relative path `"../data/data.csv"` broke when running from the repo root (which is what `Makefile` does) | Absolute path: `Path(__file__).resolve().parents[2] / "data" / "data.csv"` |
+| 3 | `exploration.ipynb` cell 13 (`get_period_day`) | Non-inclusive `<` `>` comparisons; an exact `5:00:00` returns `None` | Not used in the final model (the top-10 features don't require `period_day`); documented for reference |
+| 4 | `exploration.ipynb` cell 26 (`get_rate_from_column`) | Computes `total/delays` (inverse of the delay rate) | Doesn't affect the model, only the exploration; documented so it's not reused as-is |
+| 5 | `requirements-test.txt` | `pytest~=6.2.5` is incompatible with `anyio>=4` pulled in by `fastapi/starlette`: `ModuleNotFoundError: No module named '_pytest.scope'` when loading plugins | Bump: `pytest~=7.4`, `pytest-cov~=4.1`, `coverage~=7.6`, `mockito~=1.5` |
+| 6 | `challenge/model.py` (`_bootstrap_from_disk`) | `pd.read_csv` raises a `DtypeWarning` because of mixed-type columns in the CSV | Pass `low_memory=False` |
 
-### Decisiones de diseño
+### Design decisions
 
-- **Top-10 features fijas como constante de módulo** (`TOP_10_FEATURES`). Vienen del feature importance que XGBoost calculó en el notebook (cell 59).
-- **One-hot consistency**: tras `pd.get_dummies` se hace `reindex(columns=TOP_10_FEATURES, fill_value=0)`. Esto garantiza que el `predict()` siempre reciba las mismas 10 columnas aunque la categoría no esté presente en el input (crítico para el API cuando el cliente manda un solo vuelo).
-- **Balanceo de clases vía `class_weight='balanced'`**: sklearn calcula los pesos como `n_samples / (n_classes * np.bincount(y))`. Es equivalente a `scale_pos_weight = n_neg / n_pos` de XGBoost, sin tener que mantener el cálculo explícito.
-- **Lazy bootstrap en `predict()`**: si `predict()` se llama antes de `fit()`, el modelo se auto-entrena leyendo `data/data.csv` la primera vez. Permite que `test_model_predict` pase (no llama `fit` antes) y en producción FastAPI puede entrenar al startup.
-- **`DelayModel` no tiene I/O en `__init__`**: el bootstrap es lazy y aislado en `_bootstrap_from_disk()`. La clase es testeable sin tocar disco si se llama `fit()` directamente.
-- **Sin estado global**, todo en `self`. Ningún print/log dentro del modelo.
-- **Paths robustos**: `DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "data.csv"`. Funciona desde cualquier cwd.
+- **Top-10 features fixed as a module-level constant** (`TOP_10_FEATURES`). They come from the XGBoost feature importance computed in the notebook (cell 59).
+- **One-hot consistency**: after `pd.get_dummies`, `reindex(columns=TOP_10_FEATURES, fill_value=0)`. This guarantees that `predict()` always receives the same 10 columns even if a category isn't present in the input (critical for the API when the client sends a single flight).
+- **Class balancing via `class_weight='balanced'`**: sklearn computes weights as `n_samples / (n_classes * np.bincount(y))`. Equivalent to XGBoost's `scale_pos_weight = n_neg / n_pos`, without keeping the explicit ratio around.
+- **Lazy bootstrap in `predict()`**: if `predict()` is called before `fit()`, the model auto-trains by reading `data/data.csv` the first time. This lets `test_model_predict` pass (it doesn't call `fit` first) and lets FastAPI train on startup in production.
+- **`DelayModel` has no I/O in `__init__`**: the bootstrap is lazy and isolated in `_bootstrap_from_disk()`. The class is testable without touching disk if `fit()` is called directly.
+- **No global state**, everything in `self`. No prints/logs inside the model.
+- **Robust paths**: `DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "data.csv"`. Works from any cwd.
 
-### Verificación
+### Verification
 
 ```bash
 make model-test
@@ -128,21 +157,21 @@ make model-test
 
 ---
 
-## Part II — API con FastAPI (`challenge/api.py`)
+## Part II — FastAPI service (`challenge/api.py`)
 
-**Objetivo:** exponer el modelo vía FastAPI cumpliendo `make api-test`.
+**Goal:** expose the model via FastAPI so that `make api-test` passes.
 
 ### Endpoints
 
-| Método | Ruta | Status code OK | Descripción |
+| Method | Path | Success status | Description |
 |---|---|---|---|
 | `GET` | `/health` | 200 | Liveness probe (`{"status": "OK"}`) |
-| `POST` | `/predict` | 200 | Predice delay (0/1) por vuelo |
-| `GET` | `/docs` | 200 | Swagger UI auto-generado por FastAPI |
-| `GET` | `/redoc` | 200 | ReDoc auto-generado |
-| `GET` | `/openapi.json` | 200 | Especificación OpenAPI 3 |
+| `POST` | `/predict` | 200 | Predicts delay (0/1) per flight |
+| `GET` | `/docs` | 200 | Swagger UI auto-generated by FastAPI |
+| `GET` | `/redoc` | 200 | Auto-generated ReDoc |
+| `GET` | `/openapi.json` | 200 | OpenAPI 3 specification |
 
-### Contrato de `POST /predict`
+### `POST /predict` contract
 
 **Request:**
 
@@ -160,24 +189,24 @@ make model-test
 {"predict": [0]}
 ```
 
-**Response (400)** ante input inválido:
+**Response (400)** for invalid input:
 
 ```json
 {"detail": [{"loc": ["body", "flights", 0, "MES"], "msg": "MES must be between 1 and 12, got 13", ...}]}
 ```
 
-### Validaciones (Pydantic v1)
+### Validation (Pydantic v1)
 
-| Campo | Regla | Origen |
+| Field | Rule | Where |
 |---|---|---|
-| `OPERA` | Debe estar en `KNOWN_OPERAS` (set de 23 aerolíneas del dataset) | `@validator("OPERA")` |
-| `TIPOVUELO` | Debe ser `"I"` (Internacional) o `"N"` (Nacional) | `@validator("TIPOVUELO")` |
-| `MES` | Entero en `[1, 12]` | `@validator("MES")` |
-| `flights` | Lista no vacía de `FlightInput` | tipo `list[FlightInput]` |
+| `OPERA` | Must be in `KNOWN_OPERAS` (set of 23 airlines from the dataset) | `@validator("OPERA")` |
+| `TIPOVUELO` | Must be `"I"` (International) or `"N"` (National) | `@validator("TIPOVUELO")` |
+| `MES` | Integer in `[1, 12]` | `@validator("MES")` |
+| `flights` | Non-empty list of `FlightInput` | type `list[FlightInput]` |
 
-### Override 422 → 400
+### 422 → 400 override
 
-FastAPI por default devuelve `422 Unprocessable Entity` ante validación de Pydantic. Los tests del challenge esperan `400 Bad Request`. Lo corrijo con un exception handler global:
+By default FastAPI returns `422 Unprocessable Entity` on Pydantic validation failures. The challenge tests expect `400 Bad Request`. Fixed with a global exception handler:
 
 ```python
 @app.exception_handler(RequestValidationError)
@@ -185,27 +214,27 @@ async def _validation_exception_handler(request, exc):
     return JSONResponse(status_code=400, content={"detail": exc.errors()})
 ```
 
-### Carga del modelo
+### Model loading
 
-El `DelayModel` se instancia una vez a nivel de módulo (`_model = DelayModel()`). Como `DelayModel` no tiene I/O en `__init__`, la importación es barata. La primera llamada a `/predict` dispara el lazy bootstrap (entrena leyendo `data/data.csv`), las siguientes son inmediatas. Esto evita el hit de cold start en `/health` (importante para readiness probes).
+The `DelayModel` is instantiated once at module level (`_model = DelayModel()`). Since `DelayModel` does no I/O in `__init__`, the import is cheap. The first `/predict` call triggers the lazy bootstrap (training by reading `data/data.csv`); subsequent calls are immediate. This avoids the cold-start hit on `/health` (important for readiness probes).
 
-### Bugs adicionales encontrados y corregidos
+### Additional bugs found and fixed
 
-| # | Archivo | Bug | Fix |
+| # | File | Bug | Fix |
 |---|---|---|---|
-| 7 | `requirements.txt` | `starlette 0.20.4` (que jala `fastapi~=0.86`) usa `anyio.start_blocking_portal`, removido en `anyio>=4`. `fastapi.testclient.TestClient` falla con `AttributeError: module 'anyio' has no attribute 'start_blocking_portal'` | Pin `anyio<4` |
+| 7 | `requirements.txt` | `starlette 0.20.4` (pulled by `fastapi~=0.86`) uses `anyio.start_blocking_portal`, removed in `anyio>=4`. `fastapi.testclient.TestClient` fails with `AttributeError: module 'anyio' has no attribute 'start_blocking_portal'` | Pin `anyio<4` |
 
-### Documentación auto-generada
+### Auto-generated documentation
 
-FastAPI genera la spec OpenAPI gratis a partir de los Pydantic models y los `Field`/docstrings:
+FastAPI generates the OpenAPI spec for free from the Pydantic models and `Field`/docstrings:
 
-- `/docs` — Swagger UI interactivo (probar requests desde el browser)
-- `/redoc` — ReDoc (más limpio para leer)
-- `/openapi.json` — la spec en JSON, consumible por Postman/Insomnia/clients generados
+- `/docs` — interactive Swagger UI (try requests from the browser)
+- `/redoc` — ReDoc (cleaner reading view)
+- `/openapi.json` — the spec as JSON, consumable by Postman/Insomnia/generated clients
 
-El metadato del API (`title`, `description`, `version`, `contact`) se configura en el constructor de `FastAPI(...)`.
+API metadata (`title`, `description`, `version`, `contact`) is configured in the `FastAPI(...)` constructor.
 
-### Verificación
+### Verification
 
 ```bash
 # unit + integration
@@ -216,226 +245,285 @@ make api-test
 # manual
 uvicorn challenge.api:app --reload
 # → http://localhost:8000/health
-# → http://localhost:8000/docs   (probar /predict desde Swagger)
+# → http://localhost:8000/docs   (try /predict from Swagger)
 ```
 
 ---
 
-## Part III — Deploy en la nube
+## Part III — Cloud deployment
 
-**Proveedor:** Google Cloud Platform — Cloud Run + Artifact Registry, region `us-central1`.
+**Provider:** Google Cloud Platform — Cloud Run + Artifact Registry, region `us-central1`.
 
-**API en producción:** https://latam-delay-api-108332844354.us-central1.run.app
+**Live API:** https://latam-delay-api-108332844354.us-central1.run.app
 
-### Servicios GCP usados (free tier perpetuo)
+### GCP services used (perpetual free tier)
 
-| Servicio | Rol | Free tier mensual |
+| Service | Role | Monthly free tier |
 |---|---|---|
-| **Cloud Run** | Hostea el contenedor del FastAPI; scale-to-zero | 2M req, 360k GB-s, 180k vCPU-s |
-| **Artifact Registry** | Repo Docker privado (`latam-images`) | 0.5 GB |
-| **IAM Service Account** | `latam-deployer` para Part IV CD pipeline | gratis |
-| **Cloud Logging** | Logs estructurados auto-recolectados | 50 GB |
-| **Cloud Monitoring** | Dashboard custom (RPS, p95, 5xx, instances) | métricas built-in gratis |
+| **Cloud Run** | Hosts the FastAPI container; scale-to-zero | 2M reqs, 360k GB-s, 180k vCPU-s |
+| **Artifact Registry** | Private Docker repo (`latam-images`) | 0.5 GB |
+| **IAM Service Account** | `latam-deployer` for the Part IV CD pipeline | free |
+| **Cloud Logging** | Auto-collected structured logs | 50 GB |
+| **Cloud Monitoring** | Custom dashboard (RPS, p95, 5xx, instances) | built-in metrics free |
 
-Costo real estimado para el challenge: **$0.00 USD**.
+Estimated real cost for the challenge: **$0.00 USD**.
 
-### Infraestructura como código — Terraform
+### Infrastructure as code — Terraform
 
-Todo provisionado con Terraform en la carpeta `infra/`:
+Everything provisioned with Terraform in the `infra/` folder:
 
 ```
 infra/
 ├── versions.tf            # terraform 1.5+ + google provider 5.40+
-├── main.tf                # provider google
+├── main.tf                # google provider
 ├── variables.tf           # project_id, region, service_name, etc.
-├── terraform.tfvars       # valores concretos (no secretos)
+├── terraform.tfvars       # concrete values (no secrets)
 ├── artifact_registry.tf   # google_artifact_registry_repository
-├── iam.tf                 # latam-deployer SA + 3 roles project-level
+├── iam.tf                 # latam-deployer SA + 3 project-level roles
 ├── cloud_run.tf           # google_cloud_run_v2_service + public_invoker
 ├── monitoring.tf          # google_monitoring_dashboard custom
 ├── outputs.tf             # cloud_run_url, ar_repo_url, image_url, etc.
 └── README.md
 ```
 
-**8 recursos** se crean con un solo `terraform apply`. State local (gitignored). Para limpiar todo al final: `terraform destroy`.
+**8 resources** are created with a single `terraform apply`. State is local (gitignored). To clean everything up at the end: `terraform destroy`.
 
-### Patrón "lifecycle ignore_changes" en Cloud Run
+### "lifecycle ignore_changes" pattern on Cloud Run
 
-El recurso `google_cloud_run_v2_service.api` tiene `lifecycle.ignore_changes = [template[0].containers[0].image]`. Razón:
+The `google_cloud_run_v2_service.api` resource has `lifecycle.ignore_changes = [template[0].containers[0].image]`. Reason:
 
-- Terraform **crea** el service con un placeholder image (`us-docker.pkg.dev/cloudrun/container/hello`).
-- La **imagen real** la pushea Docker → Artifact Registry y luego `gcloud run services update --image=…` la swappea.
-- Sin el `ignore_changes`, cada `terraform plan` detectaría que la imagen cambió y querría revertirla al placeholder. Con el `ignore_changes`, Terraform maneja el "cascarón" del service y la CI/CD maneja la imagen — separación correcta de responsabilidades.
+- Terraform **creates** the service with a placeholder image (`us-docker.pkg.dev/cloudrun/container/hello`).
+- The **real image** is pushed to Artifact Registry by Docker, then `gcloud run services update --image=…` swaps it in.
+- Without `ignore_changes`, every `terraform plan` would detect the image change and try to revert it to the placeholder. With `ignore_changes`, Terraform manages the service "shell" and the CI/CD manages the image — proper separation of concerns.
 
-Este es el patrón estándar para Cloud Run con Terraform en producción.
+This is the standard production pattern for Cloud Run with Terraform.
 
-### Bootstrap GCP (one-time, manual)
+### GCP bootstrap (one-time, manual)
 
-Antes del primer `terraform apply`, configuración manual una sola vez:
+Before the first `terraform apply`, one-time manual setup:
 
-1. Proyecto GCP: `latam-challenge-495606` (display name: `latam-challenge`)
-2. Billing asociado a una cuenta activa
-3. APIs habilitadas:
+1. GCP project: `latam-challenge-495606` (display name: `latam-challenge`)
+2. Billing linked to an active billing account
+3. Enabled APIs:
    - `run.googleapis.com`
    - `artifactregistry.googleapis.com`
    - `iam.googleapis.com`
    - `cloudresourcemanager.googleapis.com`
    - `monitoring.googleapis.com`
    - `orgpolicy.googleapis.com`
-4. Org policy override: `iam.allowedPolicyMemberDomains` → `allowAll: true` (necesario para permitir `allUsers` como invocador, ya que la cuenta vive en una org Workspace).
-5. ADC autenticadas con la cuenta correcta:
+4. Org policy override: `iam.allowedPolicyMemberDomains` → `allowAll: true` (required to allow `allUsers` as an invoker, since the account lives in a Workspace org).
+5. ADC authenticated with the right account:
    - `gcloud auth login`
    - `gcloud auth application-default login`
    - `gcloud auth application-default set-quota-project latam-challenge-495606`
 
 ### Dockerfile
 
-Multi-stage para imagen pequeña sin compiladores en runtime:
+Multi-stage for a small image without compilers in runtime:
 
 - **Stage 1 (builder):** `python:3.10-slim` + `build-essential` → `pip wheel --wheel-dir=/wheels -r requirements.txt`
-- **Stage 2 (runtime):** `python:3.10-slim` → instala desde wheels (sin gcc) → copia `challenge/` y `data/` → usuario non-root `app` → `EXPOSE 8080` → `CMD uvicorn challenge.api:app --host 0.0.0.0 --port ${PORT}`
+- **Stage 2 (runtime):** `python:3.10-slim` → installs from wheels (no gcc) → copies `challenge/` and `data/` → non-root `app` user → `EXPOSE 8080` → `CMD uvicorn challenge.api:app --host 0.0.0.0 --port ${PORT}`
 
-`PORT` lo inyecta Cloud Run automáticamente (no se setea como env explícita; eso da error "reserved env name").
+`PORT` is injected by Cloud Run automatically (it can't be set as an explicit env var; that triggers a "reserved env name" error).
 
-`.dockerignore` excluye tests, infra, docs, notebook, .git, venv, etc. Imagen final ~280 MB.
+`.dockerignore` excludes tests, infra, docs, the notebook, .git, venv, etc. Final image size ~280 MB.
 
-### Flujo de deploy
+### Deploy flow
 
 ```bash
-# (una vez) bootstrap manual
+# (one-time) manual bootstrap
 cd infra
 terraform init
 terraform apply
 
-# (cada deploy) build + push + swap
+# (each deploy) build + push + swap
 make docker-build      # docker build -t latam-delay-api:latest .
-make docker-push       # tag + push a us-central1-docker.pkg.dev/...
+make docker-push       # tag + push to us-central1-docker.pkg.dev/...
 make deploy            # gcloud run services update --image=...
 ```
 
-O atajo: `make deploy` corre los 3 en cadena.
+Or shortcut: `make deploy` runs all three in sequence.
 
-### Verificación
+### Verification
 
-`make stress-test` con la URL ya en `Makefile` línea 26:
+`make stress-test` against the URL already in `Makefile` line 26:
 
 ```
 locust -f tests/stress/api_stress.py --headless --users 100 --spawn-rate 1 --run-time 60s -H <cloud_run_url>
 ```
 
-Resultados (test real contra Cloud Run en producción):
+Results (real test against Cloud Run in production):
 
-| Métrica | Valor |
+| Metric | Value |
 |---|---|
 | Total requests | 6,241 |
 | Failures | **0 (0.00%)** |
-| Throughput | 105 req/s sostenidos |
+| Throughput | 105 req/s sustained |
 | Latency p50 | 260 ms |
 | Latency p95 | 420 ms |
 | Latency p99 | 530 ms |
-| Latency p99.9 | 4.8 s (cold start tail) |
+| Latency p99.9 | 4.8 s (cold-start tail) |
 
-Reporte HTML completo en `reports/stress-test.html` después de correr el test.
+Full HTML report at `reports/stress-test.html` after running the test.
 
-### Bug adicional encontrado
+### Additional bug found
 
-| # | Archivo | Bug | Fix |
+| # | File | Bug | Fix |
 |---|---|---|---|
-| 8 | `requirements-test.txt` | `locust~=1.6` (de 2020) usa imports de Flask incompatibles con Jinja2 ≥3.1: `ImportError: cannot import name 'escape' from 'jinja2'` | Bump `locust~=2.20` |
+| 8 | `requirements-test.txt` | `locust~=1.6` (from 2020) uses Flask imports incompatible with Jinja2 ≥3.1: `ImportError: cannot import name 'escape' from 'jinja2'` | Bump `locust~=2.20` |
 
-### Dashboard de monitoreo
+### Monitoring dashboard
 
-Provisionado por `infra/monitoring.tf` — Cloud Monitoring custom dashboard accesible solo desde el proyecto GCP (privado, requiere acceso). Captura del dashboard durante / después del stress test:
+Provisioned by `infra/monitoring.tf` — a custom Cloud Monitoring dashboard accessible only from the GCP project (private, requires access). Snapshot of the dashboard during/after the stress test:
 
 ![LATAM Delay API monitoring dashboard — Cloud Run RPS, p95 latency, 5xx rate, instance count](screenshots/dashboard-overview.jpg)
 
-Widgets configurados:
+Configured widgets:
 
-- **Request count (RPS)** — sobre `run.googleapis.com/request_count`, `ALIGN_RATE`
-- **Request latency p95** — sobre `run.googleapis.com/request_latencies`, `REDUCE_PERCENTILE_95`
-- **5xx error rate** — filtrado por `metric.label.response_code_class = "5xx"`
-- **Active container instances** — sobre `run.googleapis.com/container/instance_count`, `ALIGN_MEAN`
+- **Request count (RPS)** — over `run.googleapis.com/request_count`, `ALIGN_RATE`
+- **Request latency p95** — over `run.googleapis.com/request_latencies`, `REDUCE_PERCENTILE_95`
+- **5xx error rate** — filtered by `metric.label.response_code_class = "5xx"`
+- **Active container instances** — over `run.googleapis.com/container/instance_count`, `ALIGN_MEAN`
 
-Todo se actualiza en tiempo real mientras el API recibe tráfico. La URL del dashboard sale como output de Terraform (`monitoring_dashboard_url`) pero requiere autenticación al proyecto GCP.
+Everything updates in real time as the API receives traffic. The dashboard URL comes out as a Terraform output (`monitoring_dashboard_url`) but requires authentication into the GCP project.
 
 ---
 
 ## Part IV — CI/CD (`.github/workflows/`)
 
-Cuatro workflows separados, cada uno con responsabilidad única (no un workflow gigante):
+Four separate workflows, each with a single responsibility (no monolithic workflow):
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `ci.yml` | PR a `main`/`develop`, push a esos branches | `lint` (ruff) → `test-model` + `test-api` (pytest+coverage) → `terraform-validate` (fmt + validate) |
-| `cd.yml` | Push a `main` (excluyendo cambios solo en docs/) | Auth GCP → build Docker → push a AR (con tag `:latest` y `:${SHA}`) → `gcloud run services update` → smoke test contra `/health` |
-| `claude-review.yml` | PR abierto / actualizado | Claude lee el diff y postea un review en el PR usando `anthropics/claude-code-action@beta` |
-| `pages.yml` | Push a `main` con cambios en `docs/**` | `actions/upload-pages-artifact` + `actions/deploy-pages` → publica `docs/` a GitHub Pages oficial |
+| `ci.yml` | PR to `main`/`develop`, push to those branches | `lint` (ruff) → `test-model` + `test-api` (pytest+coverage) → `terraform-validate` (fmt + validate) |
+| `cd.yml` | Push to `main` (excluding docs-only changes) | GCP auth → docker build → push to AR (tagged `:latest` and `:${SHA}`) → `gcloud run services update` → smoke test against `/health` |
+| `claude-review.yml` | PR opened / synchronized | Claude reads the diff and posts a review on the PR via `anthropics/claude-code-action@beta` |
+| `pages.yml` | Push to `main` with changes under `docs/**` | `actions/upload-pages-artifact` + `actions/deploy-pages` → publishes `docs/` to GitHub Pages |
 
-### `cd.yml` — auto-deploy a Cloud Run
+### `cd.yml` — auto-deploy to Cloud Run
 
-Replica `make deploy` dentro de Actions:
+Replicates `make deploy` inside Actions:
 
-1. **Auth GCP** vía `google-github-actions/auth@v2` con el secret `GCP_SA_KEY` (JSON key del service account `latam-deployer` provisionado por Terraform en Part III).
-2. **Configure docker** para Artifact Registry (`gcloud auth configure-docker us-central1-docker.pkg.dev`).
-3. **Build Docker image** con dos tags: `:${GITHUB_SHA}` (inmutable, para rollback) y `:latest`.
-4. **Push** ambos tags a `latam-images`.
-5. **Deploy** la imagen `:${GITHUB_SHA}` a Cloud Run con `gcloud run services update --image=...`. Cloud Run crea una nueva revisión, ruta el 100% del tráfico, y mantiene la anterior por si hay rollback rápido.
-6. **Smoke test** con `curl /health` (5 reintentos con backoff). Si no devuelve `{"status":"OK"}` el job falla y se notifica.
-7. **Summary** en `$GITHUB_STEP_SUMMARY` con URL, image SHA y service name — visible en la UI del run.
+1. **GCP auth** via `google-github-actions/auth@v2` with the `GCP_SA_KEY` secret (JSON key of the `latam-deployer` service account provisioned by Terraform in Part III).
+2. **Configure docker** for Artifact Registry (`gcloud auth configure-docker us-central1-docker.pkg.dev`).
+3. **Build the Docker image** with two tags: `:${GITHUB_SHA}` (immutable, for rollback) and `:latest`.
+4. **Push** both tags to `latam-images`.
+5. **Deploy** the `:${GITHUB_SHA}` image to Cloud Run with `gcloud run services update --image=...`. Cloud Run creates a new revision, routes 100% of the traffic to it, and keeps the previous one for fast rollback.
+6. **Smoke test** with `curl /health` (5 retries with backoff). If it doesn't return `{"status":"OK"}` the job fails and notifies.
+7. **Summary** in `$GITHUB_STEP_SUMMARY` with URL, image SHA, and service name — visible in the run UI.
 
-`paths-ignore` excluye cambios solo en `docs/**` y workflows de `pages`/`claude-review` para no redeployar el API por un README typo.
+`paths-ignore` excludes docs-only changes (`docs/**`) and the `pages`/`claude-review` workflows themselves so the API isn't redeployed for a README typo.
 
-### `claude-review.yml` — code review automático con Claude
+### `claude-review.yml` — automated code review with Claude
 
-Cada PR a `develop` / `main` dispara un review automático escrito por Claude (Anthropic). El prompt focaliza en bugs, security, test coverage, y break de contratos del API. Comenta directo en el PR. Si falta el secret `ANTHROPIC_API_KEY`, el job se salta sin romper.
+Every PR to `develop` / `main` triggers an automatic review by Claude (Anthropic). The prompt focuses on bugs, security, test coverage, and API contract regressions. Comments land directly on the PR. If the `ANTHROPIC_API_KEY` secret is missing, the job skips gracefully.
 
-### `pages.yml` — GitHub Pages via workflow oficial
+### `pages.yml` — GitHub Pages via official workflow
 
-En lugar del flujo "deploy from branch" (que renderiza pero no auditás), usamos el flujo moderno con `actions/upload-pages-artifact` + `actions/deploy-pages`. Resultado: cada deploy a Pages es un workflow run con su propio status check, log, y URL pública (`https://joseluis911.github.io/latam_challenge/`). Cuando se mergea algo en `docs/`, Pages se actualiza automáticamente sin necesidad de tocar settings.
+Instead of the "deploy from branch" flow (which renders but isn't auditable), uses the modern Actions-based flow with `actions/upload-pages-artifact` + `actions/deploy-pages`. Result: each Pages deploy is a workflow run with its own status check, log, and public URL (`https://joseluis911.github.io/latam_challenge/`). When something in `docs/` is merged, Pages updates automatically without touching settings.
 
 ### Secrets / variables (GitHub → Settings → Secrets and variables → Actions)
 
-| Nombre | Tipo | Scope | Para qué |
+| Name | Type | Scope | Purpose |
 |---|---|---|---|
-| `GCP_SA_KEY` | 🔒 Secret | environment `production` | JSON key del SA `latam-deployer`. Usado por `cd.yml` para auth GCP |
-| `ANTHROPIC_API_KEY` | 🔒 Secret | repo-level | API key de Anthropic. Usado por `claude-review.yml` |
+| `GCP_SA_KEY` | 🔒 Secret | environment `production` | JSON key for the `latam-deployer` SA. Used by `cd.yml` for GCP auth |
+| `ANTHROPIC_API_KEY` | 🔒 Secret | environment `production` | Anthropic API key. Used by `claude-review.yml` |
 
-El environment `production` actúa como gate adicional: si en el futuro queremos requerir aprobación manual antes de cada deploy, se configura ahí mismo.
+The `production` environment acts as an additional gate: if we ever want to require manual approval before each deploy, it's configured right there.
 
-### Patrón de despliegue resultante
+### Resulting deployment pattern
 
 ```
 PR feature/* → develop
    ↓
-ci.yml (lint + tests + tf-validate) + claude-review.yml (Claude comenta)
+ci.yml (lint + tests + tf-validate) + claude-review.yml (Claude comments)
    ↓
-merge a develop
+merge to develop
    ↓
 PR develop → main (release vX.Y.Z)
    ↓
-ci.yml + claude-review.yml (de nuevo)
+ci.yml + claude-review.yml (again)
    ↓
-merge a main + tag vX.Y.Z
+merge to main + tag vX.Y.Z
    ↓
 cd.yml (build → push → deploy → smoke test) ✅
-pages.yml (si cambió docs/) ✅
+pages.yml (if docs/ changed) ✅
 ```
 
-Cada release a main = nueva imagen Docker en producción + nueva revisión en Cloud Run + Pages actualizado, sin que nadie toque la consola.
+Every release to main = new Docker image in production + new Cloud Run revision + Pages updated, without anyone touching the console.
 
 ---
 
-## Cómo correr local
+## Running locally
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt -r requirements-test.txt
-make model-test
-make api-test
-make stress-test
+make model-test     # 4 passed
+make api-test       # 4 passed
+make stress-test    # against the live Cloud Run URL
 ```
 
 ---
 
-## Envío del challenge
+## End-to-end verification (v1.0.0)
 
-`POST` único a `https://advana-challenge-check-api-cr-k4hdbggvoq-uc.a.run.app/software-engineer` con el body indicado en el README.
+| Check | Result | Evidence |
+|---|---|---|
+| `make model-test` | ✅ 4/4 passed, 87% coverage on `model.py` | `tests/model/test_model.py` |
+| `make api-test` | ✅ 4/4 passed, 98% coverage on `api.py` | `tests/api/test_api.py` |
+| **Total coverage** | **92%** | `pytest --cov=challenge` |
+| `make stress-test` (live) | ✅ 6,241 reqs · **0 fails** · 105 req/s · p95 420ms · p99 530ms | `reports/stress-test.html` |
+| `terraform validate` | ✅ infra valid | CI job `terraform-validate` |
+| Cloud Run live | ✅ HTTPS, public, scale-to-zero | `https://latam-delay-api-108332844354.us-central1.run.app` |
+| Auto-deploy on merge to main | ✅ green | `.github/workflows/cd.yml` runs |
+| GitHub Pages | ✅ deployed via workflow | `https://joseluis911.github.io/latam_challenge/` |
+| Claude PR reviewer | ✅ comments on every PR | `.github/workflows/claude-review.yml` |
+| Cloud Monitoring dashboard | ✅ live metrics (RPS, p95, 5xx, instances) | screenshot in `docs/screenshots/dashboard-overview.jpg` |
+
+---
+
+## Future improvements (post-v1.0 roadmap)
+
+Things that are **not in v1.0** but would be the next steps in real production. Listed here to show awareness of how to scale this further:
+
+- **Workload Identity Federation** instead of SA JSON keys. WIF lets GitHub Actions authenticate to GCP via OIDC without managing long-lived secrets. More secure, fewer rotations.
+- **GCS backend for Terraform state** (`backend "gcs"`). Local state works for a solo dev; for a team it should move to a GCS bucket with versioning + locking.
+- **Cloud Monitoring alerts** (PagerDuty / email). The dashboard already shows p95 and 5xx; what's missing is `google_monitoring_alert_policy` resources that page when p95 > 1s sustained or 5xx > 5%.
+- **Serialized model** (pre-trained pickle baked into the Docker image). Today the model trains on the first `/predict` (lazy bootstrap, ~2s). In real production the pickle would be generated at build time and loaded at startup — no training in production.
+- **Model versioning** (model registry). MLflow or a GCS bucket with tags. Every new model version trackable.
+- **Integration tests against a Cloud Run staging environment** before the prod deploy (canary deploy with Cloud Run traffic splitting).
+- **Structured logs** (JSON) with `structlog` so Cloud Logging can filter by specific fields.
+- **Rate limiting** on the API (FastAPI middleware) for DoS protection.
+
+---
+
+## Submitting the challenge
+
+Single `POST` to the Advana endpoint with the body specified in the brief:
+
+```bash
+curl -X POST "https://advana-challenge-check-api-cr-k4hdbggvoq-uc.a.run.app/software-engineer" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jose Luis Santiago Marquez",
+    "mail": "jlsantiago691@gmail.com",
+    "github_url": "https://github.com/joseluis911/latam_challenge.git",
+    "api_url": "https://latam-delay-api-108332844354.us-central1.run.app"
+  }'
+```
+
+Expected response:
+
+```json
+{
+  "status": "OK",
+  "detail": "your request was received"
+}
+```
+
+> ⚠️ **Send only ONCE** (the LATAM brief makes this explicit). Pre-flight checklist before sending:
+> 1. The repo is public (`Settings → General → Danger Zone → Change repository visibility`).
+> 2. `main` has the final merge with the `v1.0.0` tag.
+> 3. The API URL responds `{"status":"OK"}` on `/health`.
+> 4. `make model-test`, `make api-test`, `make stress-test` all green locally.
+> 5. The `feature/*` branches are still alive (not deleted — rule #2 of the brief).
