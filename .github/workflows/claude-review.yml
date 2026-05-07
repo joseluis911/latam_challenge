@@ -23,14 +23,29 @@ jobs:
   review:
     name: Claude review
     runs-on: ubuntu-latest
+    environment: production
     if: ${{ !github.event.pull_request.draft }}
 
     steps:
+      - name: Check ANTHROPIC_API_KEY secret presence
+        id: check_key
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY secret not set; skipping Claude review."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.check_key.outputs.exists == 'true'
         with:
           fetch-depth: 0
 
       - name: Run Claude review
+        if: steps.check_key.outputs.exists == 'true'
         uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
