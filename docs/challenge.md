@@ -1,6 +1,33 @@
 # LATAM — Software Engineer (ML & LLMs) Challenge
 
-Documentación de la solución al challenge.
+Documentación de la solución al challenge — **v1.0.0**.
+
+---
+
+## TL;DR
+
+Modelo de predicción de retraso de vuelos en SCL **operacionalizado de cabo a rabo**: del notebook del DS a un API en producción con observability, CI/CD automatizado y review automático de PRs por Claude.
+
+| | |
+|---|---|
+| 🔧 **API en producción** | https://latam-delay-api-108332844354.us-central1.run.app |
+| 🌐 **GitHub Pages (landing)** | https://joseluis911.github.io/latam_challenge/ |
+| 📦 **Repo** | https://github.com/joseluis911/latam_challenge |
+| ✅ **Tests** | 8/8 passing · ~92% coverage |
+| ⚡ **Stress test live** | 6,241 reqs · **0 failures** · p95 420 ms |
+| 🚀 **Releases en main** | `v0.1.0` → `v0.2.0` → `v0.3.0` → **`v1.0.0`** |
+
+### Extras más allá del enunciado
+
+Lo que pidió LATAM + lo que sumé encima:
+
+| Lo pedido | Lo entregado | Extra |
+|---|---|---|
+| Modelo en `model.py` | LR balanceada con justificación cuantitativa, lazy bootstrap, top-10 features, 6 bugs documentados y corregidos | — |
+| API con FastAPI | Endpoints + Pydantic + Swagger + override 422→400 | — |
+| Deploy en cloud | Cloud Run + Artifact Registry | **Terraform IaC** (`infra/`, 8 recursos) · **Cloud Monitoring dashboard** custom · pattern `lifecycle.ignore_changes` profesional |
+| CI/CD básico | `ci.yml` lint+tests + `cd.yml` deploy | **`claude-review.yml`** — Claude revisa cada PR · **`pages.yml`** — auto-deploy de docs a GitHub Pages · `terraform-validate` job en CI |
+| Documentación en `challenge.md` | Este archivo (~470 líneas, todas las decisiones, bugs, métricas) | **Landing en GitHub Pages** con paleta LATAM y screenshot del dashboard |
 
 ---
 
@@ -10,6 +37,7 @@ Documentación de la solución al challenge.
 - **Mail:** jlsantiago691@gmail.com
 - **Repositorio:** https://github.com/joseluis911/latam_challenge
 - **API desplegada:** https://latam-delay-api-108332844354.us-central1.run.app
+- **Docs (Pages):** https://joseluis911.github.io/latam_challenge/
 
 ---
 
@@ -429,13 +457,72 @@ Cada release a main = nueva imagen Docker en producción + nueva revisión en Cl
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt -r requirements-test.txt
-make model-test
-make api-test
-make stress-test
+make model-test     # 4 passed
+make api-test       # 4 passed
+make stress-test    # contra el Cloud Run live
 ```
+
+---
+
+## Verificación end-to-end (v1.0.0)
+
+| Check | Resultado | Evidencia |
+|---|---|---|
+| `make model-test` | ✅ 4/4 passed, 87% coverage `model.py` | `tests/model/test_model.py` |
+| `make api-test` | ✅ 4/4 passed, 98% coverage `api.py` | `tests/api/test_api.py` |
+| **Total coverage** | **92%** | `pytest --cov=challenge` |
+| `make stress-test` (live) | ✅ 6,241 reqs · **0 fails** · 105 req/s · p95 420ms · p99 530ms | `reports/stress-test.html` |
+| `terraform validate` | ✅ infra valid | CI job `terraform-validate` |
+| Cloud Run live | ✅ HTTPS, public, scale-to-zero | `https://latam-delay-api-108332844354.us-central1.run.app` |
+| Auto-deploy on merge to main | ✅ green | `.github/workflows/cd.yml` runs |
+| GitHub Pages | ✅ deployed via workflow | `https://joseluis911.github.io/latam_challenge/` |
+| Claude PR reviewer | ✅ comments on every PR | `.github/workflows/claude-review.yml` |
+| Cloud Monitoring dashboard | ✅ live metrics (RPS, p95, 5xx, instances) | screenshot en `docs/screenshots/dashboard-overview.jpg` |
+
+---
+
+## Future improvements (roadmap post-v1.0)
+
+Cosas que **no están en v1.0** pero que en producción real haría a continuación. Las dejo escritas para mostrar awareness de cómo escalar esto:
+
+- **Workload Identity Federation** en lugar de JSON keys del SA. WIF deja a GitHub Actions autenticar a GCP vía OIDC sin manejar secrets de larga duración. Más seguro, menos rotaciones.
+- **Backend GCS para Terraform state** (`backend "gcs"`). El state local funciona para un dev solo; para equipo se mueve a un bucket GCS con versioning + locking via Cloud Storage.
+- **Alertas de Cloud Monitoring** (PagerDuty / email). El dashboard ya muestra p95 y 5xx; falta crear `google_monitoring_alert_policy` que avise si p95 > 1s sostenido o 5xx > 5%.
+- **Modelo serializado** (pickle pre-entrenado en la imagen Docker). Hoy el modelo entrena al primer `/predict` (lazy bootstrap, ~2s). En producción real el pickle se genera en el build y se carga al startup → sin training en producción.
+- **Versionado del modelo** (model registry). MLflow o un GCS bucket con tags. Cada nueva versión del modelo trackeable.
+- **Tests de integración contra Cloud Run de staging** antes del deploy a prod (canary deploy con Cloud Run traffic splitting).
+- **Logs estructurados** (JSON) con `structlog` para que Cloud Logging filtre por campos específicos.
+- **Rate limiting** en el API (FastAPI middleware) para protección DoS.
 
 ---
 
 ## Envío del challenge
 
-`POST` único a `https://advana-challenge-check-api-cr-k4hdbggvoq-uc.a.run.app/software-engineer` con el body indicado en el README.
+`POST` único al endpoint de Advana con el body fijo que pide el enunciado:
+
+```bash
+curl -X POST "https://advana-challenge-check-api-cr-k4hdbggvoq-uc.a.run.app/software-engineer" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jose Luis Santiago Marquez",
+    "mail": "jlsantiago691@gmail.com",
+    "github_url": "https://github.com/joseluis911/latam_challenge.git",
+    "api_url": "https://latam-delay-api-108332844354.us-central1.run.app"
+  }'
+```
+
+Respuesta esperada:
+
+```json
+{
+  "status": "OK",
+  "detail": "your request was received"
+}
+```
+
+> ⚠️ **Solo se manda UNA vez** (lo subraya el README de LATAM). Antes de mandarlo, validar:
+> 1. El repo es público (`Settings → General → Danger Zone → Change repository visibility`).
+> 2. `main` tiene el merge final con tag `v1.0.0`.
+> 3. La URL del API responde `{"status":"OK"}` en `/health`.
+> 4. `make model-test`, `make api-test`, `make stress-test` corren verde en local.
+> 5. El branch `feature/*` siguen vivos (no borrados — lo pide la regla #2).
