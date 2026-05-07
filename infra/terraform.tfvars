@@ -1,0 +1,5 @@
+project_id     = "latam-challenge-495606"
+region         = "us-central1"
+service_name   = "latam-delay-api"
+ar_repo_id     = "latam-images"
+deployer_sa_id = "latam-deployer"
