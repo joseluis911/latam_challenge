@@ -345,14 +345,18 @@ Reporte HTML completo en `reports/stress-test.html` después de correr el test.
 
 ### Dashboard de monitoreo
 
-Provisionado por `infra/monitoring.tf`. URL directa en el output `monitoring_dashboard_url`. Widgets:
+Provisionado por `infra/monitoring.tf` — Cloud Monitoring custom dashboard accesible solo desde el proyecto GCP (privado, requiere acceso). Captura del dashboard durante / después del stress test:
 
-- Request count (RPS) — sobre `run.googleapis.com/request_count`
-- Latency p95 — sobre `run.googleapis.com/request_latencies` con `REDUCE_PERCENTILE_95`
-- 5xx error rate — filtrado por `response_code_class="5xx"`
-- Active container instances — sobre `run.googleapis.com/container/instance_count`
+![LATAM Delay API monitoring dashboard — Cloud Run RPS, p95 latency, 5xx rate, instance count](screenshots/dashboard-overview.jpg)
 
-Todo se actualiza en tiempo real en GCP Console mientras el API recibe tráfico.
+Widgets configurados:
+
+- **Request count (RPS)** — sobre `run.googleapis.com/request_count`, `ALIGN_RATE`
+- **Request latency p95** — sobre `run.googleapis.com/request_latencies`, `REDUCE_PERCENTILE_95`
+- **5xx error rate** — filtrado por `metric.label.response_code_class = "5xx"`
+- **Active container instances** — sobre `run.googleapis.com/container/instance_count`, `ALIGN_MEAN`
+
+Todo se actualiza en tiempo real mientras el API recibe tráfico. La URL del dashboard sale como output de Terraform (`monitoring_dashboard_url`) pero requiere autenticación al proyecto GCP.
 
 ---
 
