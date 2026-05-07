@@ -31,10 +31,36 @@ Documentación de la solución al challenge.
 
 ## Flujo de trabajo (GitFlow)
 
-- `main` → releases oficiales para review.
+- `main` → releases oficiales para review (con tags semánticos).
 - `develop` → integración.
 - `feature/*` → cada parte del challenge (`feature/part-1-model`, `feature/part-2-api`, …).
 - Las ramas de desarrollo **no se borran** (lo pide el enunciado).
+
+---
+
+## Estrategia de releases incrementales
+
+`main` no espera al final del desarrollo: cada vez que `develop` alcanza un estado *consumible* se mergea a `main` con un tag semántico. Así `main` siempre refleja un artefacto deployable y el historial cuenta una historia de delivery iterativo en vez de un único big-bang final.
+
+| Después de | MVP | ¿Release? | Tag |
+|---|---|---|---|
+| Part I — modelo | ❌ no consumible (librería sola) | no | — |
+| Part II — API | ✅ **primer MVP** (API local funcional) | sí | **`v0.1.0`** |
+| Part III — deploy | ✅ MVP en cloud | sí | **`v0.2.0`** |
+| Part IV — CI/CD | ✅ auto-deploy + observability | sí | **`v0.3.0`** |
+| Release final | 🎯 polish + tag oficial | sí | **`v1.0.0`** |
+
+Mecánica del release a `main`:
+
+```bash
+git checkout main
+git pull
+git merge --no-ff develop -m "release: vX.Y.Z (descripción)"
+git tag -a vX.Y.Z -m "vX.Y.Z: <highlights>"
+git push origin main --tags
+```
+
+La rama `release/v1.0` se reserva como espacio ceremonial de estabilización para el lanzamiento oficial v1.0.0.
 
 ---
 
