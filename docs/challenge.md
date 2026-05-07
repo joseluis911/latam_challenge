@@ -31,10 +31,36 @@ Documentación de la solución al challenge.
 
 ## Flujo de trabajo (GitFlow)
 
-- `main` → releases oficiales para review.
+- `main` → releases oficiales para review (con tags semánticos).
 - `develop` → integración.
 - `feature/*` → cada parte del challenge (`feature/part-1-model`, `feature/part-2-api`, …).
 - Las ramas de desarrollo **no se borran** (lo pide el enunciado).
+
+---
+
+## Estrategia de releases incrementales
+
+`main` no espera al final del desarrollo: cada vez que `develop` alcanza un estado *consumible* se mergea a `main` con un tag semántico. Así `main` siempre refleja un artefacto deployable y el historial cuenta una historia de delivery iterativo en vez de un único big-bang final.
+
+| Después de | MVP | ¿Release? | Tag |
+|---|---|---|---|
+| Part I — modelo | ❌ no consumible (librería sola) | no | — |
+| Part II — API | ✅ **primer MVP** (API local funcional) | sí | **`v0.1.0`** |
+| Part III — deploy | ✅ MVP en cloud | sí | **`v0.2.0`** |
+| Part IV — CI/CD | ✅ auto-deploy + observability | sí | **`v0.3.0`** |
+| Release final | 🎯 polish + tag oficial | sí | **`v1.0.0`** |
+
+Mecánica del release a `main`:
+
+```bash
+git checkout main
+git pull
+git merge --no-ff develop -m "release: vX.Y.Z (descripción)"
+git tag -a vX.Y.Z -m "vX.Y.Z: <highlights>"
+git push origin main --tags
+```
+
+La rama `release/v1.0` se reserva como espacio ceremonial de estabilización para el lanzamiento oficial v1.0.0.
 
 ---
 
@@ -104,12 +130,94 @@ make model-test
 
 ## Part II — API con FastAPI (`challenge/api.py`)
 
-**Objetivo:** exponer el modelo vía FastAPI y pasar `make api-test`.
+**Objetivo:** exponer el modelo vía FastAPI cumpliendo `make api-test`.
 
-- Endpoint(s):
-  - `POST /predict` — _por completar_
-  - `GET /health`
-- Validación de input: _por completar._
+### Endpoints
+
+| Método | Ruta | Status code OK | Descripción |
+|---|---|---|---|
+| `GET` | `/health` | 200 | Liveness probe (`{"status": "OK"}`) |
+| `POST` | `/predict` | 200 | Predice delay (0/1) por vuelo |
+| `GET` | `/docs` | 200 | Swagger UI auto-generado por FastAPI |
+| `GET` | `/redoc` | 200 | ReDoc auto-generado |
+| `GET` | `/openapi.json` | 200 | Especificación OpenAPI 3 |
+
+### Contrato de `POST /predict`
+
+**Request:**
+
+```json
+{
+  "flights": [
+    {"OPERA": "Aerolineas Argentinas", "TIPOVUELO": "N", "MES": 3}
+  ]
+}
+```
+
+**Response (200):**
+
+```json
+{"predict": [0]}
+```
+
+**Response (400)** ante input inválido:
+
+```json
+{"detail": [{"loc": ["body", "flights", 0, "MES"], "msg": "MES must be between 1 and 12, got 13", ...}]}
+```
+
+### Validaciones (Pydantic v1)
+
+| Campo | Regla | Origen |
+|---|---|---|
+| `OPERA` | Debe estar en `KNOWN_OPERAS` (set de 23 aerolíneas del dataset) | `@validator("OPERA")` |
+| `TIPOVUELO` | Debe ser `"I"` (Internacional) o `"N"` (Nacional) | `@validator("TIPOVUELO")` |
+| `MES` | Entero en `[1, 12]` | `@validator("MES")` |
+| `flights` | Lista no vacía de `FlightInput` | tipo `list[FlightInput]` |
+
+### Override 422 → 400
+
+FastAPI por default devuelve `422 Unprocessable Entity` ante validación de Pydantic. Los tests del challenge esperan `400 Bad Request`. Lo corrijo con un exception handler global:
+
+```python
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(request, exc):
+    return JSONResponse(status_code=400, content={"detail": exc.errors()})
+```
+
+### Carga del modelo
+
+El `DelayModel` se instancia una vez a nivel de módulo (`_model = DelayModel()`). Como `DelayModel` no tiene I/O en `__init__`, la importación es barata. La primera llamada a `/predict` dispara el lazy bootstrap (entrena leyendo `data/data.csv`), las siguientes son inmediatas. Esto evita el hit de cold start en `/health` (importante para readiness probes).
+
+### Bugs adicionales encontrados y corregidos
+
+| # | Archivo | Bug | Fix |
+|---|---|---|---|
+| 7 | `requirements.txt` | `starlette 0.20.4` (que jala `fastapi~=0.86`) usa `anyio.start_blocking_portal`, removido en `anyio>=4`. `fastapi.testclient.TestClient` falla con `AttributeError: module 'anyio' has no attribute 'start_blocking_portal'` | Pin `anyio<4` |
+
+### Documentación auto-generada
+
+FastAPI genera la spec OpenAPI gratis a partir de los Pydantic models y los `Field`/docstrings:
+
+- `/docs` — Swagger UI interactivo (probar requests desde el browser)
+- `/redoc` — ReDoc (más limpio para leer)
+- `/openapi.json` — la spec en JSON, consumible por Postman/Insomnia/clients generados
+
+El metadato del API (`title`, `description`, `version`, `contact`) se configura en el constructor de `FastAPI(...)`.
+
+### Verificación
+
+```bash
+# unit + integration
+make api-test
+# pytest tests/api --cov=challenge ...
+# 4 passed, api.py coverage ~98%
+
+# manual
+uvicorn challenge.api:app --reload
+# → http://localhost:8000/health
+# → http://localhost:8000/docs   (probar /predict desde Swagger)
+```
 
 ---
 

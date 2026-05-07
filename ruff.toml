@@ -25,7 +25,8 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-"tests/**/*.py" = ["N802", "N803"]  # test method naming flexibility
+"tests/**/*.py" = ["N802", "N803"]    # test method naming flexibility
+"challenge/api.py" = ["N805"]         # Pydantic v1 @validator uses cls, not self
 
 [format]
 quote-style = "double"
